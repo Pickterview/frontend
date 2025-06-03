@@ -15,7 +15,7 @@ function AuthPage({ showLogin = true }) {
       {" "}
       {/* 화면 잘림 방지 */}
       <div className="max-w-md w-full space-y-8">
-        <div className="text-center mb-12">
+        <div className="text-center mb-10">
           {" "}
           {/* 타이틀과 폼 간격 조정 */}
           <h1
@@ -27,9 +27,9 @@ function AuthPage({ showLogin = true }) {
             {/* 로고 텍스트 스타일 변경 */}
             Pickterview
           </h1>
-          <p className="text-lg text-light-text-secondary dark:text-dark-text-secondary">
+          <div className="text-lg font-extrabold text-light-text-secondary dark:text-dark-text-secondary">
             AI 역량 검사 준비, Pickterview와 함께하세요.
-          </p>
+          </div>
         </div>
 
         <div
