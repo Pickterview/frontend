@@ -1,7 +1,7 @@
-// src/pages/PracticeModePage.jsx
+// src/pages/CoverLetterPracticePage.jsx
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import Modal from "../components/Common/Modal";
+import { useNavigate, useLocation } from "react-router-dom";
+import Modal from "../components/Common/Modal"; // 새로운 Modal.jsx 사용
 import ThemeToggle from "../components/ThemeToggle";
 import {
   ArrowUturnLeftIcon,
@@ -14,17 +14,22 @@ import {
   NoSymbolIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
+  DocumentMagnifyingGlassIcon,
+  // ChatBubbleBottomCenterTextIcon, // 이전 디자인 요소, 제거
+  // LightBulbIcon, // 이전 디자인 요소, 제거
 } from "@heroicons/react/24/solid";
 
-const MOCK_QUESTIONS = [
-  "자기소개를 1분 동안 해보세요.",
-  "우리 회사에 지원하신 특별한 동기가 있나요?",
-  "본인의 가장 큰 강점과 그것을 뒷받침할 경험을 말씀해주세요.",
-  "입사 후 이루고 싶은 단기적 및 장기적 목표는 무엇인가요?",
-  "스트레스 상황에 어떻게 대처하는 편인가요?",
+const COVER_LETTER_MOCK_QUESTIONS = [
+  "자기소개서에 언급된 [X] 경험에 대해 더 자세히 설명해주시겠어요?",
+  "자신을 [Y]라고 표현하셨는데, 구체적인 사례를 들어 설명해주세요.",
+  "자기소개서의 내용 중 가장 강조하고 싶은 부분과 그 이유는 무엇인가요?",
+  "이 직무에 관심을 갖게 된 계기가 자기소개서의 어떤 부분과 연결되나요?",
+  "본인이 작성한 자기소개서에서 가장 중요하다고 생각하는 키워드 3가지를 말씀해주세요.",
 ];
-const PREPARATION_TIME = 30;
-const ANSWER_TIME = 90;
+
+const PREPARATION_TIME = 45;
+const ANSWER_TIME = 120;
+
 const TIMER_STATE = {
   IDLE: "idle",
   PREPARING: "preparing",
@@ -36,10 +41,13 @@ const SUBMISSION_STATE = {
   SUBMITTED: "submitted",
 };
 
-function PracticeModePage() {
+function CoverLetterPracticePage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const submittedCoverLetter = location.state?.coverLetter || "";
+
   const [currentQuestion, setCurrentQuestion] = useState("");
-  const [questionNumber, setQuestionNumber] = useState(1);
+  const [questionNumber, setQuestionNumber] = useState(1); // 항상 1
   const [timerState, setTimerState] = useState(TIMER_STATE.IDLE);
   const [countdown, setCountdown] = useState(PREPARATION_TIME);
   const [isExitModalOpen, setIsExitModalOpen] = useState(false);
@@ -61,6 +69,17 @@ function PracticeModePage() {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const mediaSetupRef = useRef(false);
+
+  useEffect(() => {
+    if (submittedCoverLetter) {
+      console.log(
+        "Cover letter received:",
+        submittedCoverLetter.substring(0, 100) + "..."
+      );
+    } else {
+      console.warn("No cover letter text found in location state.");
+    }
+  }, [submittedCoverLetter]);
 
   const stopMediaTracks = useCallback(() => {
     if (streamRef.current) {
@@ -95,27 +114,22 @@ function PracticeModePage() {
     }
   }, [stopMediaTracks]);
 
-  const loadNewQuestion = useCallback(() => {
-    setCurrentQuestion(
-      MOCK_QUESTIONS[Math.floor(Math.random() * MOCK_QUESTIONS.length)]
+  const loadInitialQuestion = useCallback(() => {
+    const randomIndex = Math.floor(
+      Math.random() * COVER_LETTER_MOCK_QUESTIONS.length
     );
-    setQuestionNumber(1); // 일반모드는 항상 Question 1로 표시 (또는 필요시 누적)
-    setTimerState(TIMER_STATE.PREPARING);
-    setCountdown(PREPARATION_TIME);
-    setSubmissionStatus(SUBMISSION_STATE.NONE);
-    setSubmissionProgress(0);
+    setCurrentQuestion(COVER_LETTER_MOCK_QUESTIONS[randomIndex]);
+    setQuestionNumber(1);
   }, []);
 
   useEffect(() => {
-    // loadNewQuestion(); // Let setupMedia trigger the first question load implicitly by setting timerState
+    loadInitialQuestion();
     if (!mediaSetupRef.current) {
-      setupMedia().then((success) => {
-        if (success) loadNewQuestion(); // Load question only after successful media setup
-      });
+      setupMedia();
       mediaSetupRef.current = true;
     }
     return () => stopMediaTracks();
-  }, [setupMedia, stopMediaTracks, loadNewQuestion]); // loadNewQuestion added here
+  }, [setupMedia, stopMediaTracks, loadInitialQuestion]);
 
   const startRecordingPhase = useCallback(() => {
     if (mediaError) {
@@ -142,9 +156,30 @@ function PracticeModePage() {
       setTimeout(() => {
         setIsSubmissionModalOpen(false);
         navigate("/");
-      }, 2000);
+      }, 2000); // 이전 답변에서 약간 늘린 딜레이 유지
     }, 3000);
   }, [navigate, stopMediaTracks, submissionStatus]);
+
+  // 현재 질문 재녹화 핸들러
+  const handleRecordAgain = async () => {
+    if (mediaError) {
+      alert(mediaError);
+      return;
+    }
+    stopMediaTracks();
+    const mediaReady = await setupMedia();
+    if (mediaReady) {
+      setTimerState(TIMER_STATE.PREPARING);
+      setCountdown(PREPARATION_TIME);
+      setSubmissionStatus(SUBMISSION_STATE.NONE);
+      setSubmissionProgress(0);
+      alert("현재 질문에 대해 다시 녹화를 시작합니다.");
+    } else {
+      alert(
+        "미디어 장치를 재설정하는데 실패했습니다. 페이지를 새로고침 해주세요."
+      );
+    }
+  };
 
   useEffect(() => {
     if (mediaError && timerState !== TIMER_STATE.IDLE) {
@@ -172,6 +207,7 @@ function PracticeModePage() {
     startRecordingPhase,
     submissionStatus,
   ]);
+
   useEffect(() => {
     let progressInterval;
     if (submissionStatus === SUBMISSION_STATE.SUBMITTING) {
@@ -205,21 +241,6 @@ function PracticeModePage() {
   };
   const handleRetryMediaSetup = async () => await setupMedia();
 
-  // "다른 질문 연습" 또는 "새 연습 시작"을 위한 함수
-  const handlePracticeNewQuestion = async () => {
-    if (mediaError && !(await setupMedia())) {
-      // 미디어 오류가 있었고 재설정 실패시
-      alert("미디어 장치를 사용할 수 없습니다. 설정을 확인해주세요.");
-      return;
-    }
-    // 미디어 오류가 없었거나, 재설정 성공시 새 질문 로드
-    stopMediaTracks(); // 기존 미디어 정리
-    const mediaReady = await setupMedia(); // 새 미디어 설정 (타이머 PREPARING으로)
-    if (mediaReady) {
-      loadNewQuestion(); // 새 질문 로드
-    }
-  };
-
   const currentMaxTime =
     timerState === TIMER_STATE.PREPARING ? PREPARATION_TIME : ANSWER_TIME;
   const progressPercentage =
@@ -238,30 +259,43 @@ function PracticeModePage() {
   };
 
   return (
-    // 페이지 전체 레이아웃은 기존 중앙 집중형 스타일 유지
+    // 사용자가 선호한 기존 페이지 레이아웃 구조 유지 (상단바 고정 없음, 콘텐츠 중앙 집중)
     <div className="min-h-screen flex flex-col bg-light-bg-primary dark:bg-dark-bg-primary text-light-text-primary dark:text-dark-text-primary relative px-4 py-6 md:p-8 items-center justify-center">
       <button
         onClick={openExitModal}
         title="나가기"
         className="absolute top-4 left-4 sm:top-6 sm:left-6 z-50 p-2.5 rounded-full hover:bg-light-bg-secondary/80 dark:hover:bg-dark-bg-secondary/80 active:bg-light-border dark:active:bg-dark-border transition-colors"
       >
-        {" "}
-        <ArrowUturnLeftIcon className="w-6 h-6 text-light-text-secondary dark:text-dark-text-secondary" />{" "}
+        <ArrowUturnLeftIcon className="w-6 h-6 text-light-text-secondary dark:text-dark-text-secondary" />
       </button>
       <div className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 z-50">
-        {" "}
-        <ThemeToggle />{" "}
+        <ThemeToggle />
       </div>
 
       <div className="w-full max-w-6xl flex flex-col items-center">
-        <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-purple-600 dark:from-blue-400 dark:to-purple-500 mt-8 mb-2 md:mb-3">
-          일반 연습 모드 Q{questionNumber}
-        </h1>
+        <div className="flex items-center mt-8 mb-2 md:mb-3">
+          <DocumentMagnifyingGlassIcon className="w-8 h-8 md:w-9 md:h-9 text-teal-500 dark:text-teal-400 mr-2" />
+          <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-teal-500 to-cyan-600 dark:from-teal-400 dark:to-cyan-500">
+            자소서 기반 연습 Q{questionNumber}
+          </h1>
+        </div>
+
         <p className="text-lg md:text-xl lg:text-2xl font-semibold leading-relaxed text-center mb-6 md:mb-8 px-4 text-light-text-primary dark:text-dark-text-primary">
           {mediaError
             ? "미디어 장치 오류 발생"
             : currentQuestion || "질문을 로딩 중입니다..."}
         </p>
+        {/* Optional: Contextual tip - if you want to re-add it (not part of the "original" simpler design the user pointed to)
+            {!mediaError && submittedCoverLetter && (
+                 <div className="my-4 p-3 bg-light-bg-tertiary dark:bg-dark-bg-tertiary rounded-md border border-light-border dark:border-dark-border max-w-2xl text-center">
+                    <div className="flex items-center justify-center text-xs text-light-text-secondary dark:text-dark-text-secondary">
+                        <LightBulbIcon className="w-4 h-4 mr-2 text-yellow-500"/>
+                        <span>이 질문은 제출하신 자기소개서 내용을 기반으로 합니다.</span>
+                    </div>
+                 </div>
+             )}
+          */}
+
         <div className="w-full flex flex-col md:flex-row items-center md:items-start justify-center gap-6 md:gap-10 lg:gap-12">
           <div className="w-full md:w-3/5 lg:w-7/12 xl:w-3/5 flex flex-col items-center">
             <div className="relative w-full aspect-video bg-gradient-to-br from-gray-800 to-gray-900 dark:from-black dark:to-dark-bg-secondary rounded-xl shadow-2xl overflow-hidden flex items-center justify-center group">
@@ -323,6 +357,7 @@ function PracticeModePage() {
               ))}
             </div>
           </div>
+
           <div className="w-full md:w-2/5 lg:w-5/12 xl:w-2/5 flex flex-col items-center justify-center space-y-6 md:space-y-8 mt-4 md:mt-0">
             <div className="relative w-48 h-48 sm:w-52 sm:h-52 flex items-center justify-center mt-6 md:mt-10 lg:mt-12">
               {" "}
@@ -416,7 +451,7 @@ function PracticeModePage() {
                     답변 제출하기{" "}
                   </button>{" "}
                   <button
-                    onClick={handlePracticeNewQuestion}
+                    onClick={handleRecordAgain}
                     disabled={
                       submissionStatus === SUBMISSION_STATE.SUBMITTING ||
                       submissionStatus === SUBMISSION_STATE.SUBMITTED
@@ -430,7 +465,7 @@ function PracticeModePage() {
                   >
                     {" "}
                     <ArrowPathIcon className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />{" "}
-                    다른 질문 연습{" "}
+                    다시 녹화하기{" "}
                   </button>{" "}
                 </>
               )}
@@ -439,12 +474,12 @@ function PracticeModePage() {
                 submissionStatus !== SUBMISSION_STATE.SUBMITTING &&
                 submissionStatus !== SUBMISSION_STATE.SUBMITTED && (
                   <button
-                    onClick={handlePracticeNewQuestion}
-                    className="w-full flex items-center justify-center px-6 py-3.5 text-base sm:text-lg font-semibold rounded-xl bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white transition-all duration-150 ease-in-out shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-gray-500/50"
+                    onClick={handleRecordAgain}
+                    className="w-full flex items-center justify-center px-6 py-3.5 text-base sm:text-lg font-semibold rounded-xl bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white transition-all duration-150 ease-in-out shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-teal-500/50"
                   >
                     {" "}
-                    <ArrowPathIcon className="w-5 h-5 sm:w-6 sm:h-6 mr-2" /> 새
-                    연습 시작{" "}
+                    <ArrowPathIcon className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />{" "}
+                    현재 질문 다시 시도{" "}
                   </button>
                 )}
               {mediaError && timerState === TIMER_STATE.IDLE && (
@@ -468,21 +503,22 @@ function PracticeModePage() {
           연습 종료 확인
         </h3>
         <p className="text-sm sm:text-base text-light-text-secondary dark:text-dark-text-secondary mb-8 max-w-xs">
-          지금 나가시면 현재 진행 중인 연습은 저장되지 않습니다.
+          지금 나가시면 현재 진행 중인 자소서 기반 연습은 저장되지 않습니다.
         </p>
         <div className="flex flex-col sm:flex-row justify-center gap-3 w-full">
+          {" "}
           <button
             onClick={closeExitModal}
             className="px-6 py-3 text-sm sm:text-base font-medium rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-light-text-primary dark:text-dark-text-primary transition-colors w-full sm:w-auto"
           >
             취소
-          </button>
+          </button>{" "}
           <button
             onClick={handleConfirmExit}
             className="px-6 py-3 text-sm sm:text-base font-medium rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors w-full sm:w-auto shadow-md hover:shadow-lg"
           >
             확인 (나가기)
-          </button>
+          </button>{" "}
         </div>
       </Modal>
 
@@ -496,6 +532,7 @@ function PracticeModePage() {
         {submissionStatus === SUBMISSION_STATE.SUBMITTING && (
           <>
             <div role="status" className="mb-5">
+              {" "}
               <svg
                 aria-hidden="true"
                 className="inline w-10 h-10 sm:w-12 sm:h-12 text-gray-200 animate-spin dark:text-gray-700 fill-blue-600"
@@ -503,25 +540,27 @@ function PracticeModePage() {
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
+                {" "}
                 <path
                   d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
                   fill="currentColor"
-                />
+                />{" "}
                 <path
                   d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0492C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5424 39.6781 93.9676 39.0409Z"
                   fill="currentFill"
-                />
-              </svg>
-              <span className="sr-only">Loading...</span>
+                />{" "}
+              </svg>{" "}
+              <span className="sr-only">Loading...</span>{" "}
             </div>
             <h3 className="text-xl sm:text-2xl font-semibold mb-2 text-light-text-primary dark:text-dark-text-primary">
               답변 제출 중...
             </h3>
             <div className="w-full max-w-xs sm:max-w-sm mx-auto bg-gray-200 dark:bg-gray-700 rounded-full h-3 sm:h-3.5 my-3">
+              {" "}
               <div
                 className="bg-blue-600 h-3 sm:h-3.5 rounded-full transition-all duration-100 ease-linear"
                 style={{ width: `${submissionProgress}%` }}
-              ></div>
+              ></div>{" "}
             </div>
             <p className="text-sm text-light-text-secondary dark:text-dark-text-secondary">
               {Math.round(submissionProgress)}%
@@ -543,5 +582,4 @@ function PracticeModePage() {
     </div>
   );
 }
-
-export default PracticeModePage;
+export default CoverLetterPracticePage;
