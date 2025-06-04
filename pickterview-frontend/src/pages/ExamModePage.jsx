@@ -1,4 +1,4 @@
-// src/pages/PracticeModePage.jsx
+// src/pages/ExamModePage.jsx
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Modal from "../components/Common/Modal";
@@ -14,6 +14,8 @@ import {
   NoSymbolIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
+  ChevronRightIcon,
+  ShieldCheckIcon as PageIcon,
 } from "@heroicons/react/24/solid";
 
 const MOCK_QUESTIONS = [
@@ -22,9 +24,15 @@ const MOCK_QUESTIONS = [
   "본인의 가장 큰 강점과 그것을 뒷받침할 경험을 말씀해주세요.",
   "입사 후 이루고 싶은 단기적 및 장기적 목표는 무엇인가요?",
   "스트레스 상황에 어떻게 대처하는 편인가요?",
+  "다른 지원자와 차별화되는 본인만의 경쟁력은 무엇이라고 생각하십니까?",
+  "팀 프로젝트에서 갈등이 발생했을 때 어떻게 해결하시겠습니까?",
+  "실패했던 경험과 그 경험을 통해 무엇을 배웠는지 말씀해주십시오.",
+  "본인이 생각하는 직업윤리는 무엇이며, 왜 중요하다고 생각하나요?",
+  "마지막으로 하고 싶은 말이 있다면 자유롭게 해주세요.",
 ];
 const PREPARATION_TIME = 30;
 const ANSWER_TIME = 90;
+const TOTAL_EXAM_QUESTIONS = 3;
 const TIMER_STATE = {
   IDLE: "idle",
   PREPARING: "preparing",
@@ -36,10 +44,13 @@ const SUBMISSION_STATE = {
   SUBMITTED: "submitted",
 };
 
-function PracticeModePage() {
+function ExamModePage() {
   const navigate = useNavigate();
-  const [currentQuestion, setCurrentQuestion] = useState("");
-  const [questionNumber, setQuestionNumber] = useState(1);
+  const [currentQuestionText, setCurrentQuestionText] = useState("");
+  const [currentQuestionNumberInSequence, setCurrentQuestionNumberInSequence] =
+    useState(1);
+  const [examQuestions, setExamQuestions] = useState([]);
+  const [currentExamQuestionIndex, setCurrentExamQuestionIndex] = useState(0);
   const [timerState, setTimerState] = useState(TIMER_STATE.IDLE);
   const [countdown, setCountdown] = useState(PREPARATION_TIME);
   const [isExitModalOpen, setIsExitModalOpen] = useState(false);
@@ -95,27 +106,53 @@ function PracticeModePage() {
     }
   }, [stopMediaTracks]);
 
-  const loadNewQuestion = useCallback(() => {
-    setCurrentQuestion(
-      MOCK_QUESTIONS[Math.floor(Math.random() * MOCK_QUESTIONS.length)]
-    );
-    setQuestionNumber(1); // 일반모드는 항상 Question 1로 표시 (또는 필요시 누적)
-    setTimerState(TIMER_STATE.PREPARING);
-    setCountdown(PREPARATION_TIME);
-    setSubmissionStatus(SUBMISSION_STATE.NONE);
-    setSubmissionProgress(0);
-  }, []);
+  const loadQuestionForExam = useCallback(() => {
+    if (
+      examQuestions.length > 0 &&
+      currentExamQuestionIndex < TOTAL_EXAM_QUESTIONS
+    ) {
+      setCurrentQuestionText(examQuestions[currentExamQuestionIndex]);
+      setCurrentQuestionNumberInSequence(currentExamQuestionIndex + 1);
+      // Timer and submission states are reset when media is setup for the question
+      // Or explicitly reset here if setupMedia is not guaranteed to run for every new question load.
+      setTimerState(TIMER_STATE.PREPARING);
+      setCountdown(PREPARATION_TIME);
+      setSubmissionStatus(SUBMISSION_STATE.NONE);
+      setSubmissionProgress(0);
+    } else if (currentExamQuestionIndex >= TOTAL_EXAM_QUESTIONS) {
+      navigate("/");
+    }
+  }, [examQuestions, currentExamQuestionIndex, navigate]);
 
   useEffect(() => {
-    // loadNewQuestion(); // Let setupMedia trigger the first question load implicitly by setting timerState
-    if (!mediaSetupRef.current) {
-      setupMedia().then((success) => {
-        if (success) loadNewQuestion(); // Load question only after successful media setup
-      });
-      mediaSetupRef.current = true;
-    }
+    const shuffledQuestions = [...MOCK_QUESTIONS].sort(
+      () => 0.5 - Math.random()
+    );
+    setExamQuestions(shuffledQuestions.slice(0, TOTAL_EXAM_QUESTIONS));
+    // Initial media setup will be triggered by the next useEffect when examQuestions is set.
+    if (!mediaSetupRef.current) mediaSetupRef.current = true; // Mark that initial setup sequence can begin
     return () => stopMediaTracks();
-  }, [setupMedia, stopMediaTracks, loadNewQuestion]); // loadNewQuestion added here
+  }, [stopMediaTracks]); // Only stopMediaTracks as dependency for cleanup
+
+  useEffect(() => {
+    if (mediaSetupRef.current && examQuestions.length > 0) {
+      if (currentExamQuestionIndex === 0 && !streamRef.current) {
+        // Initial setup for the very first question
+        setupMedia().then((success) => {
+          if (success) loadQuestionForExam();
+        });
+      } else if (streamRef.current) {
+        // For subsequent questions, if media stream already exists (or was just setup by handleNextQuestion)
+        loadQuestionForExam();
+      }
+      // If streamRef.current is null for subsequent questions, handleNextQuestion should call setupMedia then load.
+    }
+  }, [
+    examQuestions,
+    currentExamQuestionIndex,
+    setupMedia,
+    loadQuestionForExam,
+  ]);
 
   const startRecordingPhase = useCallback(() => {
     if (mediaError) {
@@ -139,12 +176,16 @@ function PracticeModePage() {
     setTimeout(() => {
       setSubmissionStatus(SUBMISSION_STATE.SUBMITTED);
       stopMediaTracks();
-      setTimeout(() => {
-        setIsSubmissionModalOpen(false);
-        navigate("/");
-      }, 2000);
+      const isLastQuestionInExam =
+        currentExamQuestionIndex >= TOTAL_EXAM_QUESTIONS - 1;
+      if (isLastQuestionInExam) {
+        setTimeout(() => {
+          setIsSubmissionModalOpen(false);
+          navigate("/");
+        }, 2000);
+      }
     }, 3000);
-  }, [navigate, stopMediaTracks, submissionStatus]);
+  }, [currentExamQuestionIndex, navigate, stopMediaTracks, submissionStatus]);
 
   useEffect(() => {
     if (mediaError && timerState !== TIMER_STATE.IDLE) {
@@ -189,6 +230,23 @@ function PracticeModePage() {
     return () => clearInterval(progressInterval);
   }, [submissionStatus]);
 
+  const handleNextQuestion = async () => {
+    setIsSubmissionModalOpen(false); // Close current submission modal
+    const nextIndex = currentExamQuestionIndex + 1;
+    if (nextIndex < TOTAL_EXAM_QUESTIONS) {
+      stopMediaTracks(); // Stop tracks for previous question
+      const mediaReady = await setupMedia(); // Setup media for new question (this will set timer to PREPARING)
+      if (mediaReady) {
+        setCurrentExamQuestionIndex(nextIndex); // This will trigger useEffect to load the question text via loadQuestionForExam
+      } else {
+        console.error("Exam Mode: Media setup failed for next question.");
+        // Handle error, maybe navigate away or show persistent error
+      }
+    } else {
+      navigate("/"); // Should not be reached if button is hidden correctly
+    }
+  };
+
   const openExitModal = () => setIsExitModalOpen(true);
   const closeExitModal = () => setIsExitModalOpen(false);
   const handleConfirmExit = () => {
@@ -203,20 +261,26 @@ function PracticeModePage() {
     }
     startRecordingPhase();
   };
-  const handleRetryMediaSetup = async () => await setupMedia();
-
-  // "다른 질문 연습" 또는 "새 연습 시작"을 위한 함수
-  const handlePracticeNewQuestion = async () => {
-    if (mediaError && !(await setupMedia())) {
-      // 미디어 오류가 있었고 재설정 실패시
-      alert("미디어 장치를 사용할 수 없습니다. 설정을 확인해주세요.");
+  const handleRetryMediaSetup = async () => {
+    // This might need to also re-trigger question loading if called during an error state
+    await setupMedia();
+    if (!mediaError && examQuestions.length > 0) {
+      // if setup is successful
+      loadQuestionForExam();
+    }
+  };
+  const handleReRecordCurrentExamQuestion = async () => {
+    if (mediaError) {
+      alert(mediaError);
       return;
     }
-    // 미디어 오류가 없었거나, 재설정 성공시 새 질문 로드
-    stopMediaTracks(); // 기존 미디어 정리
-    const mediaReady = await setupMedia(); // 새 미디어 설정 (타이머 PREPARING으로)
+    stopMediaTracks();
+    const mediaReady = await setupMedia();
     if (mediaReady) {
-      loadNewQuestion(); // 새 질문 로드
+      loadQuestionForExam(); // Reloads current question state (text, timer)
+      alert("현재 질문에 대해 다시 녹화를 시작합니다.");
+    } else {
+      alert("미디어 장치를 재설정하는데 실패했습니다.");
     }
   };
 
@@ -236,6 +300,7 @@ function PracticeModePage() {
       return "text-yellow-200 dark:text-yellow-700/50";
     return "text-gray-200 dark:text-gray-700/50";
   };
+  const pageTitleDisplay = `실전 모드 Q ${currentQuestionNumberInSequence} / ${TOTAL_EXAM_QUESTIONS}`;
 
   return (
     // 페이지 전체 레이아웃은 기존 중앙 집중형 스타일 유지
@@ -252,15 +317,17 @@ function PracticeModePage() {
         {" "}
         <ThemeToggle />{" "}
       </div>
-
       <div className="w-full max-w-6xl flex flex-col items-center">
-        <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-purple-600 dark:from-blue-400 dark:to-purple-500 mt-8 mb-2 md:mb-3">
-          일반 연습 모드 Q{questionNumber}
-        </h1>
+        <div className="flex items-center mt-8 mb-2 md:mb-3">
+          <PageIcon className="w-8 h-8 md:w-9 md:h-9 text-accent-main dark:text-accent-light mr-2" />
+          <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-accent-main to-purple-600 dark:from-accent-main dark:to-purple-500">
+            {pageTitleDisplay}
+          </h1>
+        </div>
         <p className="text-lg md:text-xl lg:text-2xl font-semibold leading-relaxed text-center mb-6 md:mb-8 px-4 text-light-text-primary dark:text-dark-text-primary">
           {mediaError
             ? "미디어 장치 오류 발생"
-            : currentQuestion || "질문을 로딩 중입니다..."}
+            : currentQuestionText || "질문을 로딩 중입니다..."}
         </p>
         <div className="w-full flex flex-col md:flex-row items-center md:items-start justify-center gap-6 md:gap-10 lg:gap-12">
           <div className="w-full md:w-3/5 lg:w-7/12 xl:w-3/5 flex flex-col items-center">
@@ -416,7 +483,7 @@ function PracticeModePage() {
                     답변 제출하기{" "}
                   </button>{" "}
                   <button
-                    onClick={handlePracticeNewQuestion}
+                    onClick={handleReRecordCurrentExamQuestion}
                     disabled={
                       submissionStatus === SUBMISSION_STATE.SUBMITTING ||
                       submissionStatus === SUBMISSION_STATE.SUBMITTED
@@ -430,7 +497,7 @@ function PracticeModePage() {
                   >
                     {" "}
                     <ArrowPathIcon className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />{" "}
-                    다른 질문 연습{" "}
+                    현재 질문 다시 녹화{" "}
                   </button>{" "}
                 </>
               )}
@@ -439,12 +506,12 @@ function PracticeModePage() {
                 submissionStatus !== SUBMISSION_STATE.SUBMITTING &&
                 submissionStatus !== SUBMISSION_STATE.SUBMITTED && (
                   <button
-                    onClick={handlePracticeNewQuestion}
+                    onClick={handleReRecordCurrentExamQuestion}
                     className="w-full flex items-center justify-center px-6 py-3.5 text-base sm:text-lg font-semibold rounded-xl bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white transition-all duration-150 ease-in-out shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-gray-500/50"
                   >
                     {" "}
-                    <ArrowPathIcon className="w-5 h-5 sm:w-6 sm:h-6 mr-2" /> 새
-                    연습 시작{" "}
+                    <ArrowPathIcon className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />{" "}
+                    현재 질문 다시 시도{" "}
                   </button>
                 )}
               {mediaError && timerState === TIMER_STATE.IDLE && (
@@ -465,10 +532,10 @@ function PracticeModePage() {
       <Modal isOpen={isExitModalOpen} onClose={closeExitModal}>
         <ExclamationTriangleIcon className="w-16 h-16 sm:w-20 sm:h-20 text-yellow-500 mb-5" />
         <h3 className="text-xl sm:text-2xl font-semibold mb-3 text-light-text-primary dark:text-dark-text-primary">
-          연습 종료 확인
+          실전 모드 종료
         </h3>
         <p className="text-sm sm:text-base text-light-text-secondary dark:text-dark-text-secondary mb-8 max-w-xs">
-          지금 나가시면 현재 진행 중인 연습은 저장되지 않습니다.
+          지금 나가시면 현재 진행 중인 실전 모드는 저장되지 않습니다.
         </p>
         <div className="flex flex-col sm:flex-row justify-center gap-3 w-full">
           <button
@@ -489,13 +556,13 @@ function PracticeModePage() {
       <Modal
         isOpen={isSubmissionModalOpen}
         onClose={() => {
-          if (submissionStatus !== SUBMISSION_STATE.SUBMITTING)
-            setIsSubmissionModalOpen(false);
+          /* Controlled by logic, especially "Next Question" */
         }}
       >
         {submissionStatus === SUBMISSION_STATE.SUBMITTING && (
           <>
             <div role="status" className="mb-5">
+              {" "}
               <svg
                 aria-hidden="true"
                 className="inline w-10 h-10 sm:w-12 sm:h-12 text-gray-200 animate-spin dark:text-gray-700 fill-blue-600"
@@ -503,25 +570,27 @@ function PracticeModePage() {
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
+                {" "}
                 <path
                   d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z"
                   fill="currentColor"
-                />
+                />{" "}
                 <path
                   d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0492C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5424 39.6781 93.9676 39.0409Z"
                   fill="currentFill"
-                />
-              </svg>
-              <span className="sr-only">Loading...</span>
+                />{" "}
+              </svg>{" "}
+              <span className="sr-only">Loading...</span>{" "}
             </div>
             <h3 className="text-xl sm:text-2xl font-semibold mb-2 text-light-text-primary dark:text-dark-text-primary">
               답변 제출 중...
             </h3>
             <div className="w-full max-w-xs sm:max-w-sm mx-auto bg-gray-200 dark:bg-gray-700 rounded-full h-3 sm:h-3.5 my-3">
+              {" "}
               <div
                 className="bg-blue-600 h-3 sm:h-3.5 rounded-full transition-all duration-100 ease-linear"
                 style={{ width: `${submissionProgress}%` }}
-              ></div>
+              ></div>{" "}
             </div>
             <p className="text-sm text-light-text-secondary dark:text-dark-text-secondary">
               {Math.round(submissionProgress)}%
@@ -534,14 +603,30 @@ function PracticeModePage() {
             <h3 className="text-xl sm:text-2xl font-semibold mb-3 text-light-text-primary dark:text-dark-text-primary">
               제출 완료!
             </h3>
-            <p className="text-sm sm:text-base text-light-text-secondary dark:text-dark-text-secondary mb-8 max-w-xs">
-              잠시 후 메인 화면으로 이동합니다.
-            </p>
+            {currentExamQuestionIndex < TOTAL_EXAM_QUESTIONS - 1 ? (
+              <>
+                <p className="text-sm text-light-text-secondary dark:text-dark-text-secondary mt-2 mb-6 max-w-xs">
+                  다음 문제로 진행해주세요. (
+                  {currentQuestionNumberInSequence + 1} / {TOTAL_EXAM_QUESTIONS}
+                  )
+                </p>
+                <button
+                  onClick={handleNextQuestion}
+                  className="w-full max-w-xs flex items-center justify-center gap-2 px-6 py-3 text-base font-medium rounded-xl text-white transition-colors bg-accent-main hover:bg-accent-dark focus:ring-2 focus:ring-accent-main/50"
+                >
+                  {" "}
+                  다음 문제 <ChevronRightIcon className="w-5 h-5" />{" "}
+                </button>
+              </>
+            ) : (
+              <p className="text-sm text-light-text-secondary dark:text-dark-text-secondary mt-2 max-w-xs">
+                모든 문제를 완료했습니다. 잠시 후 메인 화면으로 이동합니다.
+              </p>
+            )}
           </>
         )}
       </Modal>
     </div>
   );
 }
-
-export default PracticeModePage;
+export default ExamModePage;

@@ -1,18 +1,28 @@
 // src/pages/HomePage.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+// ... other imports
+import CoverLetterSubmitModal from "../components/Practice/CoverLetterSubmitModal";
+// ...
+
+// (Previous imports and constants like TOTAL_EXAM_QUESTIONS remain)
+// src/pages/HomePage.jsx
+// ... (other imports from your HomePage.jsx)
 import UserInfoCard from "../components/MainPage/UserInfoCard";
 import MenuButton from "../components/MainPage/MenuButton";
 import ThemeToggle from "../components/ThemeToggle";
 import MyPageContent from "../components/MainPage/MyPageContent";
-import Modal from "../components/Common/Modal";
+import Modal from "../components/Common/Modal"; // Already there
 import AccountSettingsForm from "../components/MainPage/AccountSettingsForm";
 import MyPageDetailModalContent from "../components/MainPage/MyPageDetailModalContent";
 
-import { CogIcon } from "@heroicons/react/24/outline";
+import {
+  CogIcon,
+  ShieldCheckIcon as SolidShieldCheckIcon,
+} from "@heroicons/react/24/solid";
 import {
   AcademicCapIcon,
-  DocumentTextIcon,
+  DocumentTextIcon, // Used for 자소서 모드 MenuButton
   ShieldCheckIcon,
   PresentationChartLineIcon,
   ChatBubbleLeftRightIcon,
@@ -24,7 +34,10 @@ import {
   recordPracticeAttempt,
 } from "../services/practiceAttemptService";
 
+const TOTAL_EXAM_QUESTIONS = 3;
+
 function HomePage() {
+  // ... (existing states: isUserLoggedIn, isMyPageOpen, etc.)
   const [isUserLoggedIn, setIsUserLoggedIn] = useState(false);
   const [isMyPageOpen, setIsMyPageOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -40,6 +53,11 @@ function HomePage() {
     attemptsLeft: 0,
     canAttempt: false,
   });
+
+  const [isExamStartModalOpen, setIsExamStartModalOpen] = useState(false);
+
+  // New state for Cover Letter Modal
+  const [isCoverLetterModalOpen, setIsCoverLetterModalOpen] = useState(false);
 
   const navigate = useNavigate();
 
@@ -71,11 +89,7 @@ function HomePage() {
   };
 
   const handleOpenPracticeStartModal = () => {
-    console.log(
-      "연습 일반 모드 버튼 클릭됨 -> handleOpenPracticeStartModal 호출"
-    );
     const currentStatus = getPracticeAttemptStatus();
-    console.log("Current practice attempt status:", currentStatus);
     setPracticeAttemptInfo(currentStatus);
     setIsPracticeStartModalOpen(true);
   };
@@ -85,27 +99,53 @@ function HomePage() {
   };
 
   const handleProceedToPractice = () => {
-    console.log(
-      "모달 '진행' 버튼 클릭됨 -> handleProceedToPractice 호출. 현재 시도 정보:",
-      practiceAttemptInfo
-    );
-    if (practiceAttemptInfo.canAttempt) {
+    if (practiceAttemptInfo.canAttempt || true) {
       if (recordPracticeAttempt()) {
-        console.log("횟수 차감 성공.");
         setPracticeAttemptInfo(getPracticeAttemptStatus());
         handleClosePracticeStartModal();
-        console.log("Navigating to /practice/general");
         navigate("/practice/general");
       } else {
-        console.error("횟수 차감 실패 (recordPracticeAttempt returned false)");
         alert(
           "오류: 연습 횟수를 기록하는 데 문제가 발생했습니다. 다시 시도해주세요."
         );
       }
     } else {
-      console.warn("시도 불가능 (practiceAttemptInfo.canAttempt is false)");
-      alert("오늘은 더 이상 연습을 진행할 수 없습니다.");
+      alert("오늘은 더 이상 일반 연습을 진행할 수 없습니다.");
     }
+  };
+
+  const handleOpenExamStartModal = () => {
+    setIsExamStartModalOpen(true);
+  };
+
+  const handleCloseExamStartModal = () => {
+    setIsExamStartModalOpen(false);
+  };
+
+  const handleProceedToExam = () => {
+    handleCloseExamStartModal();
+    navigate("/practice/exam");
+  };
+
+  // Handlers for Cover Letter Mode
+  const handleOpenCoverLetterModal = () => {
+    setIsCoverLetterModalOpen(true);
+  };
+
+  const handleCloseCoverLetterModal = () => {
+    setIsCoverLetterModalOpen(false);
+  };
+
+  const handleStartCoverLetterPractice = (coverLetterText) => {
+    console.log(
+      "Cover letter submitted:",
+      coverLetterText.substring(0, 100) + "..."
+    ); // Log a snippet
+    // Potentially save the cover letter or pass it to the practice page
+    handleCloseCoverLetterModal();
+    navigate("/practice/cover-letter", {
+      state: { coverLetter: coverLetterText },
+    });
   };
 
   if (!isUserLoggedIn && !localStorage.getItem("pickterviewUser")) {
@@ -121,6 +161,7 @@ function HomePage() {
   return (
     <>
       <div className="min-h-screen flex flex-col bg-light-bg-primary dark:bg-dark-bg-primary text-light-text-primary dark:text-dark-text-primary">
+        {/* Header */}
         <header className="px-6 py-3 flex items-center justify-between border-b border-light-border dark:border-dark-border flex-shrink-0 sticky top-0 lg:static bg-light-bg-primary dark:bg-dark-bg-primary z-20">
           <div className="flex items-center space-x-2">
             <h1 className="font-heading text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-accent-main to-blue-500 dark:to-blue-400">
@@ -142,6 +183,7 @@ function HomePage() {
           </div>
         </header>
 
+        {/* Main Content */}
         <main className="flex-1 grid grid-cols-12 gap-6 p-6">
           <div className="col-span-12 lg:col-span-3 flex flex-col">
             <UserInfoCard onMyPageToggle={handleToggleMyPage} />
@@ -161,39 +203,43 @@ function HomePage() {
                       title="연습 일반 모드"
                       description="다양한 유형으로 연습"
                       icon={AcademicCapIcon}
+                      onClick={handleOpenPracticeStartModal}
+                      // ... other props
                       bgColorClass="bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700"
                       hoverFillColor="bg-white/10"
                       delay={100}
-                      onClick={handleOpenPracticeStartModal}
                     />
                     <MenuButton
-                      title="연습 자소서 모드"
+                      title="연습 자소서 모드" // Updated
                       description="자소서 기반 질문 대비"
                       icon={DocumentTextIcon}
+                      onClick={handleOpenCoverLetterModal} // New handler
                       bgColorClass="bg-gradient-to-br from-teal-500 to-green-600 dark:from-teal-600 dark:to-green-700"
                       hoverFillColor="bg-white/10"
                       delay={150}
-                      // onClick={() => alert("자소서 모드 클릭됨")}
                     />
                     <MenuButton
                       title="실전 모드"
                       description="실제 면접 최종 점검!"
                       icon={ShieldCheckIcon}
+                      onClick={handleOpenExamStartModal}
+                      // ... other props
                       bgColorClass="bg-gradient-to-br from-accent-main to-purple-700 dark:from-accent-main dark:to-purple-800"
                       hoverFillColor="bg-white/10"
                       delay={200}
-                      // onClick={() => alert("실전 모드 클릭됨")}
                     />
                     <MenuButton
                       title="나의 학습 분석"
                       description="학습 성과 확인"
                       icon={PresentationChartLineIcon}
+                      onClick={() => alert("학습 분석 준비 중입니다.")}
+                      // ... other props
                       bgColorClass="bg-gradient-to-br from-amber-500 to-orange-600 dark:from-amber-600 dark:to-orange-700"
                       hoverFillColor="bg-white/10"
                       delay={250}
-                      // onClick={() => alert("학습 분석 클릭됨")}
                     />
                   </div>
+                  {/* Pickterview 소식 */}
                   <div className="p-5 bg-light-bg-secondary dark:bg-dark-bg-secondary rounded-2xl shadow-lg relative flex flex-col max-h-[220px] sm:max-h-[240px]">
                     <div className="flex justify-between items-center mb-3 flex-shrink-0">
                       <h3 className="text-lg font-semibold text-light-text-primary dark:text-dark-text-primary flex items-center">
@@ -243,6 +289,8 @@ function HomePage() {
           </div>
         </main>
       </div>
+
+      {/* Account Settings Modal */}
       <Modal
         isOpen={isSettingsModalOpen}
         onClose={closeSettingsModal}
@@ -255,6 +303,8 @@ function HomePage() {
           />
         )}
       </Modal>
+
+      {/* Detail Modal (for MyPage content) */}
       <Modal
         isOpen={detailModalOpen}
         onClose={closeDetailModal}
@@ -262,43 +312,89 @@ function HomePage() {
       >
         <MyPageDetailModalContent type={modalContentType} />
       </Modal>
-      // HomePage.jsx 내 Modal 부분 수정 예시
+
+      {/* Practice Start Modal */}
       <Modal
         isOpen={isPracticeStartModalOpen}
         onClose={handleClosePracticeStartModal}
-        title="연습 일반 모드 시작"
+        // title="연습 일반 모드 시작" // This title is now part of the children
       >
-        {/* 스타일 강화된 모달 컨텐츠 */}
-        <div className="p-5 sm:p-6 text-center">
+        {/* Content is now fully responsible for its appearance */}
+        <AcademicCapIcon className="w-16 h-16 sm:w-20 sm:h-20 text-blue-500 mb-5" />{" "}
+        {/* Larger icon, more margin */}
+        <h3 className="text-xl sm:text-2xl font-semibold mb-3 text-light-text-primary dark:text-dark-text-primary">
+          연습 일반 모드 시작 {/* Title moved here */}
+        </h3>
+        <p className="text-sm sm:text-base text-light-text-secondary dark:text-dark-text-secondary mb-8 max-w-xs">
           {" "}
-          {/* 패딩 및 중앙 정렬 */}
-          <ShieldCheckIcon className="w-16 h-16 text-accent-main mx-auto mb-4" />{" "}
-          {/* 아이콘 추가 및 스타일링 */}
+          {/* Increased bottom margin, max-width for better readability */}
+          {practiceAttemptInfo.canAttempt || true
+            ? "준비가 되셨다면 '진행' 버튼을 눌러주세요."
+            : "오늘은 이미 연습을 진행하셨습니다."}
+        </p>
+        <div className="flex flex-col sm:flex-row justify-center gap-3 w-full">
+          {" "}
+          {/* Ensure buttons take appropriate width */}
+          <button
+            onClick={handleClosePracticeStartModal}
+            className="px-6 py-3 text-sm sm:text-base font-medium rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-light-text-primary dark:text-dark-text-primary transition-colors w-full sm:w-auto"
+          >
+            취소
+          </button>
+          <button
+            onClick={handleProceedToPractice}
+            disabled={!(practiceAttemptInfo.canAttempt || true)}
+            className={`px-6 py-3 text-sm sm:text-base font-medium rounded-lg text-white transition-colors w-full sm:w-auto ${
+              !(practiceAttemptInfo.canAttempt || true)
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-accent-main hover:bg-accent-dark focus:ring-2 focus:ring-accent-main/50"
+            }`}
+          >
+            진행
+          </button>
+        </div>
+      </Modal>
+
+      {/* Exam Start Modal */}
+      <Modal
+        isOpen={isExamStartModalOpen}
+        onClose={handleCloseExamStartModal}
+        title="실전 모드 시작"
+      >
+        {/* Content as before */}
+        <div className="text-center">
+          <SolidShieldCheckIcon className="w-16 h-16 text-accent-main mx-auto mb-4" />
           <h3 className="text-lg sm:text-xl font-semibold mb-2 text-light-text-primary dark:text-dark-text-primary">
-            연습을 시작할까요?
+            실전 모드를 시작할까요?
           </h3>
           <p className="text-sm sm:text-base text-light-text-secondary dark:text-dark-text-secondary mb-6">
-            {practiceAttemptInfo.canAttempt || true // 무제한이므로 항상 true 간주
-              ? "준비가 되셨다면 '진행' 버튼을 눌러주세요."
-              : "오늘은 이미 연습을 진행하셨습니다."}
+            실전 모드는 총 {TOTAL_EXAM_QUESTIONS}개의 질문으로 진행됩니다.
+            <br />
+            준비가 되셨다면 '진행' 버튼을 눌러주세요.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-3">
             <button
-              onClick={handleClosePracticeStartModal}
+              onClick={handleCloseExamStartModal}
               className="px-6 py-2.5 text-sm sm:text-base font-medium rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-light-text-primary dark:text-dark-text-primary transition-colors w-full sm:w-auto"
             >
               취소
             </button>
             <button
-              onClick={handleProceedToPractice}
-              // disabled 속성은 무제한이므로 제거하거나 항상 false
+              onClick={handleProceedToExam}
               className="px-6 py-2.5 text-sm sm:text-base font-medium rounded-lg text-white transition-colors bg-accent-main hover:bg-accent-dark focus:ring-2 focus:ring-accent-main/50 w-full sm:w-auto"
             >
-              진행
+              진행 ({TOTAL_EXAM_QUESTIONS}문제)
             </button>
           </div>
         </div>
       </Modal>
+
+      {/* Cover Letter Submit Modal (New) */}
+      <CoverLetterSubmitModal
+        isOpen={isCoverLetterModalOpen}
+        onClose={handleCloseCoverLetterModal}
+        onStartPractice={handleStartCoverLetterPractice}
+      />
     </>
   );
 }
