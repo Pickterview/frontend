@@ -1,6 +1,6 @@
-// src/components/MainPage/UserInfoCard.jsx
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+// useNavigate는 HomePage에서 로그아웃 후 페이지 이동을 담당하므로 여기서 직접 사용하지 않음
+// import { useNavigate } from "react-router-dom";
 import {
   UserIcon as MyPageIcon,
   ArrowRightOnRectangleIcon,
@@ -12,11 +12,11 @@ import { CheckCircleIcon } from "@heroicons/react/24/outline";
 const getTierInfo = (tierName, subTier) => {
   const tierUpper = tierName?.toUpperCase();
   let tierData = {
-    name: "플래티넘", // Default or fallback tier name
-    colorHex: "#49b2d4", // Default or fallback color
-    colorClass: "text-tier-platinum",
-    bgColorClass: "bg-tier-platinum/20",
-    iconColor: "text-tier-platinum",
+    name: "티어 정보 없음", // 기본값 또는 로딩 중 표시
+    colorHex: "#9CA3AF", // 기본 회색
+    colorClass: "text-gray-400",
+    bgColorClass: "bg-gray-400/10",
+    iconColor: "text-gray-400",
   };
 
   if (tierUpper === "BRONZE")
@@ -59,88 +59,77 @@ const getTierInfo = (tierName, subTier) => {
       bgColorClass: "bg-tier-diamond/20",
       iconColor: "text-tier-diamond",
     };
+  // 백엔드에서 오는 tier 문자열이 "BRONZE3" 같은 형태라면 여기서 파싱 필요
+  // 예시: const mainTierMatch = tierName?.match(/([A-Z]+)/i);
+  //       const subTierMatch = tierName?.match(/(\d+)$/);
+  //       const mainTier = mainTierMatch ? mainTierMatch[0].toUpperCase() : null;
+  //       const actualSubTier = subTierMatch ? parseInt(subTierMatch[0]) : subTier || 1;
+  //       if (mainTier === "BRONZE") tierData = ...
+  //       return { displayName: `${tierData.name} ${actualSubTier}`, ...tierData };
 
   return {
-    displayName: `${tierData.name} ${subTier || 1}`,
+    displayName: `${tierData.name} ${
+      subTier || (tierName === "LOADING" ? "" : 1)
+    }`, // 로딩 중일 때 subTier 숫자 숨김
     ...tierData,
   };
 };
 
 const initialChecklistItems = [
-  { id: 1, text: "일일 출석체크", completed: true, points: 10 },
+  { id: 1, text: "일일 출석체크", completed: false, points: 10 }, // 기본은 false, 첫날은 true로 변경 가능
   { id: 2, text: "연속 출석체크 (7일)", completed: false, points: 70 },
   { id: 3, text: "일일 연습면접 수행", completed: false, points: 50 },
   { id: 4, text: "실전 면접 1회 완료", completed: false, points: 100 },
 ];
 
-function UserInfoCard({ onMyPageToggle }) {
-  const [userData, setUserData] = useState(null);
+// user prop과 onLogoutRequest prop을 받도록 수정
+function UserInfoCard({ user, onMyPageToggle, onLogoutRequest }) {
   const [checklist, setChecklist] = useState(initialChecklistItems);
-  const navigate = useNavigate();
+  // const navigate = useNavigate(); // HomePage에서 처리하므로 여기서는 삭제
 
+  // user prop이 변경될 때 체크리스트를 로드/초기화하도록 useEffect 수정
   useEffect(() => {
-    const storedUser = localStorage.getItem("pickterviewUser");
-    let parsedUser;
-    if (storedUser) {
-      parsedUser = JSON.parse(storedUser);
+    if (user && user.email && user.name) {
+      // user 정보가 있을 때만 실행
+      const checklistKey = `checklist_${user.name}_${user.email}`;
+      const storedChecklist = localStorage.getItem(checklistKey);
+      if (storedChecklist) {
+        setChecklist(JSON.parse(storedChecklist));
+      } else {
+        // 새 사용자 또는 정보 없는 사용자를 위해 초기화
+        // 첫 번째 항목만 true로 하는 로직이 필요하다면 여기서 처리
+        const initialItemsWithFirstCompleted = initialChecklistItems.map(
+          (item, index) => (index === 0 ? { ...item, completed: true } : item)
+        );
+        setChecklist(initialItemsWithFirstCompleted);
+        localStorage.setItem(
+          checklistKey,
+          JSON.stringify(initialItemsWithFirstCompleted)
+        );
+      }
     } else {
-      // Fallback/default user if nothing in localStorage
-      parsedUser = {
-        isLoggedIn: true,
-        name: "이진규", // Default name
-        tier: "DIAMOND", // Default tier
-        subTier: 2,
-        exp: 60,
-        points: 52500,
-        email: "aiduriaaa@", // Default email
-        profileImage: "/images/user.jpg", // Default profile image
-      };
-      // Optionally save this default user to localStorage if you want it to persist
-      // localStorage.setItem("pickterviewUser", JSON.stringify(parsedUser));
+      // user 정보가 없으면 (예: 로그아웃 직후), 체크리스트를 초기 상태로 되돌림
+      setChecklist(initialChecklistItems);
     }
-    setUserData(parsedUser);
-
-    // Initialize checklist based on potentially new/default user
-    const checklistKey = `checklist_${parsedUser.name}_${parsedUser.email}`; // Make key more unique
-    const storedChecklist = localStorage.getItem(checklistKey);
-    if (storedChecklist) {
-      setChecklist(JSON.parse(storedChecklist));
-    } else {
-      // Reset checklist to initial for a new or default user
-      const initialItems = initialChecklistItems.map(
-        (item) =>
-          item.id === 1
-            ? { ...item, completed: true }
-            : { ...item, completed: false } // Ensure only first is completed by default
-      );
-      setChecklist(initialItems);
-      localStorage.setItem(checklistKey, JSON.stringify(initialItems));
-    }
-  }, []); // Empty dependency array means this runs once on mount
-
-  const handleLogout = () => {
-    localStorage.removeItem("pickterviewUser");
-    // Potentially remove checklist too, or handle it based on your app's logic for logout
-    // if (userData) {
-    //   localStorage.removeItem(`checklist_${userData.name}_${userData.email}`);
-    // }
-    navigate("/login");
-  };
+  }, [user]); // user prop이 바뀔 때마다 이 useEffect 실행
 
   const toggleChecklistItem = (id) => {
     const updatedChecklist = checklist.map((item) =>
       item.id === id ? { ...item, completed: !item.completed } : item
     );
     setChecklist(updatedChecklist);
-    if (userData) {
-      const checklistKey = `checklist_${userData.name}_${userData.email}`;
+    if (user && user.email && user.name) {
+      // user 정보가 있을 때만 localStorage에 저장
+      const checklistKey = `checklist_${user.name}_${user.email}`;
       localStorage.setItem(checklistKey, JSON.stringify(updatedChecklist));
     }
   };
 
-  if (!userData) {
+  // 로딩 상태: user prop이 아직 없거나, user.tier가 "LOADING"일 때 (HomePage에서 초기값으로 설정한 경우)
+  if (!user || user.tier === "LOADING") {
     return (
       <div className="bg-light-bg-secondary dark:bg-dark-bg-secondary p-6 sm:p-7 rounded-2xl shadow-xl w-full animate-pulse flex flex-col lg:h-full">
+        {/* 스켈레톤 UI (이전과 동일) */}
         <div className="flex flex-col items-center text-center mb-5">
           <div className="w-28 h-28 sm:w-30 sm:h-30 rounded-full bg-gray-300 dark:bg-gray-700 mb-3"></div>
           <div className="h-7 w-3/4 bg-gray-300 dark:bg-gray-700 rounded mb-1.5"></div>
@@ -151,19 +140,14 @@ function UserInfoCard({ onMyPageToggle }) {
           <div className="h-3 w-3/4 bg-gray-300 dark:bg-gray-700 rounded"></div>
         </div>
         <div className="border-t border-gray-300 dark:border-gray-700 pt-4 mt-4">
-          {" "}
-          {/* Changed from mt-auto to mt-4 */}
           <div className="h-5 w-1/3 bg-gray-300 dark:bg-gray-700 rounded mb-2"></div>
           <div className="space-y-1.5">
             <div className="h-6 w-full bg-gray-300 dark:bg-gray-700 rounded-md"></div>
             <div className="h-6 w-full bg-gray-300 dark:bg-gray-700 rounded-md"></div>
-            <div className="h-6 w-full bg-gray-300 dark:bg-gray-700 rounded-md"></div>
-            <div className="h-6 w-full bg-gray-300 dark:bg-gray-700 rounded-md"></div>
+            {/* ... */}
           </div>
         </div>
         <div className="w-full mt-auto pt-3 space-y-2">
-          {" "}
-          {/* This mt-auto pushes buttons down */}
           <div className="h-10 w-full bg-gray-300 dark:bg-gray-700 rounded-lg"></div>
           <div className="h-10 w-full bg-gray-300 dark:bg-gray-700 rounded-lg"></div>
         </div>
@@ -171,22 +155,21 @@ function UserInfoCard({ onMyPageToggle }) {
     );
   }
 
-  const currentTier = getTierInfo(userData.tier, userData.subTier);
+  // user prop에서 직접 데이터를 가져와 사용
+  const currentTier = getTierInfo(user.tier, user.subTier);
 
   return (
     <div className="bg-light-bg-secondary dark:bg-dark-bg-secondary p-6 sm:p-7 rounded-2xl shadow-xl w-full animate-fadeInUp flex flex-col lg:h-full">
       <div className="flex flex-col items-center text-center mb-5 flex-shrink-0">
-        {" "}
-        {/* Added flex-shrink-0 */}
         <div className="relative mb-3">
           <img
-            src={userData.profileImage || "/images/user.jpg"} // Use userData.profileImage
-            alt="프로필"
+            src={user.profileImage || "/images/user.jpg"} // 기본 이미지 경로 수정
+            alt={user.name || "프로필"}
             className="w-28 h-28 sm:w-30 sm:h-30 rounded-full object-cover border-4 border-light-border dark:border-dark-border shadow-lg"
           />
           <div
             className={`absolute -bottom-1 -right-1 p-1 rounded-full shadow-md`}
-            style={{ backgroundColor: `${currentTier.colorHex}30` }} // Template literal for safety
+            style={{ backgroundColor: `${currentTier.colorHex}30` }}
           >
             <StarIcon
               className="w-5 h-5 sm:w-5.5 sm:h-5.5"
@@ -195,13 +178,13 @@ function UserInfoCard({ onMyPageToggle }) {
           </div>
         </div>
         <h2 className="text-2xl sm:text-2xl font-bold text-light-text-primary dark:text-dark-text-primary mb-0.5">
-          {userData.name}
+          {user.name || "사용자 이름"}
         </h2>
         <p
           className="text-sm sm:text-sm font-semibold px-2.5 py-0.5 rounded-full"
           style={{
             color: currentTier.colorHex,
-            backgroundColor: `${currentTier.colorHex}20`, // Template literal
+            backgroundColor: `${currentTier.colorHex}20`,
           }}
         >
           {currentTier.displayName}
@@ -209,21 +192,19 @@ function UserInfoCard({ onMyPageToggle }) {
       </div>
 
       <div className="space-y-4 mb-5 flex-shrink-0">
-        {" "}
-        {/* Added flex-shrink-0 */}
         <div>
           <div
             className="flex justify-between text-xs sm:text-sm font-medium mb-1"
             style={{ color: currentTier.colorHex }}
           >
             <span>경험치</span>
-            <span>{userData.exp}%</span>
+            <span>{user.exp != null ? user.exp : 0}%</span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-3.5 sm:h-4 overflow-hidden shadow-inner">
             <div
               className="h-full rounded-full"
               style={{
-                width: `${userData.exp}%`,
+                width: `${user.exp != null ? user.exp : 0}%`,
                 backgroundColor: currentTier.colorHex,
               }}
             ></div>
@@ -234,17 +215,13 @@ function UserInfoCard({ onMyPageToggle }) {
             보유 포인트
           </p>
           <p className="text-xl sm:text-xl font-bold text-light-text-primary dark:text-dark-text-primary">
-            {userData.points ? userData.points.toLocaleString() : 0}{" "}
-            {/* Added check for points */}
+            {user.points != null ? user.points.toLocaleString() : 0}{" "}
             <span className="text-accent-main text-md sm:text-lg">P</span>
           </p>
         </div>
       </div>
 
-      {/* 오늘의 목표: This section will take up remaining space due to mt-auto on the button container below it */}
       <div className="border-t border-light-border dark:border-dark-border pt-4 mb-auto overflow-y-auto custom-scrollbar-thin">
-        {" "}
-        {/* mb-auto here makes this section grow, overflow for its content */}
         <h4 className="text-sm font-semibold text-light-text-primary dark:text-dark-text-primary mb-2 flex-shrink-0">
           오늘의 목표
         </h4>
@@ -276,10 +253,9 @@ function UserInfoCard({ onMyPageToggle }) {
                 <span
                   className={`ml-auto text-xs font-medium`}
                   style={{
-                    // Ensure color is applied correctly
                     color: item.completed
-                      ? currentTier.colorHex // Use tier color for completed points
-                      : "rgb(156 163 175 / 1)", // Default gray for incomplete points
+                      ? currentTier.colorHex
+                      : "rgb(156 163 175 / 1)",
                   }}
                 >
                   +{item.points}P
@@ -291,20 +267,19 @@ function UserInfoCard({ onMyPageToggle }) {
       </div>
 
       <div className="w-full pt-4 space-y-2 flex-shrink-0">
-        {" "}
-        {/* Buttons at the bottom, flex-shrink-0 */}
         <button
           onClick={onMyPageToggle}
           className="w-full flex items-center justify-center py-2.5 px-4 rounded-lg text-sm font-medium
-                           bg-accent-main/10 hover:bg-accent-main/20 dark:bg-accent-main/20 dark:hover:bg-accent-main/30 
+                           bg-accent-main/10 hover:bg-accent-main/20 dark:bg-accent-main/20 dark:hover:bg-accent-main/30
                            text-accent-main dark:text-sky-400 dark:hover:text-sky-300
                            transition-colors duration-200"
         >
           <MyPageIcon className="w-4.5 h-4.5 mr-2" />
           마이페이지
         </button>
+        {/* HomePage에서 전달받은 로그아웃 함수 호출 */}
         <button
-          onClick={handleLogout}
+          onClick={onLogoutRequest}
           className="w-full flex items-center justify-center py-2.5 px-4 rounded-lg text-sm font-medium
                            bg-red-500/10 hover:bg-red-500/20 text-red-500 dark:text-red-400
                            dark:bg-red-500/20 dark:hover:bg-red-500/30 transition-colors duration-200"
